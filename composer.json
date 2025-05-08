@@ -33,7 +33,7 @@
         "illuminate/auth": "^11.0",
         "illuminate/container": "^11.0",
         "illuminate/contracts": "^11.0",
-        "mongodb/laravel-mongodb": "^4.3"
+        "mongodb/laravel-mongodb": "^5.3"
     },
     "require-dev": {
         "monolog/monolog": "^3.2",
