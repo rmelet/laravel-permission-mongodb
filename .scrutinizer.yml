@@ -4,6 +4,8 @@ build:
         mongodb: true
         selenium: true
         php:
+            version: 8.1
+        php:
             # Install additional extensions from https://pecl.php.net
             pecl_extensions:
                 - mongodb
