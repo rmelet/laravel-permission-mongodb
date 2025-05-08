@@ -1,6 +1,7 @@
 {
     "name": "mostafamaklad/laravel-permission-mongodb",
     "description": "Permission handling for Laravel 5.2 and up using mongodb",
+    "version": "dev-master",
     "keywords": [
         "laravel",
         "security",
@@ -37,8 +38,8 @@
     },
     "require-dev": {
         "monolog/monolog": "^3.2",
-        "orchestra/testbench": "^8.0",
-        "phpunit/phpunit": "^9.5.10",
+        "orchestra/testbench": "^9.0",
+        "phpunit/phpunit": "^10.0",
         "squizlabs/php_codesniffer": "^3.7"
     },
     "autoload": {
