@@ -8,7 +8,6 @@ use Maklad\Permission\Helpers;
 use Maklad\Permission\PermissionRegistrar;
 use MongoDB\Laravel\Eloquent\Model;
 use MongoDB\Laravel\Eloquent\Builder;
-use MongoDB\Laravel\Relations\BelongsToMany;
 use ReflectionException;
 use function collect;
 
@@ -29,7 +28,8 @@ trait HasRoles
                 return;
             }
 
-            $model->roles()->sync([]);
+            $model->role_ids = [];
+            $model->save();
         });
     }
 
@@ -44,9 +44,32 @@ trait HasRoles
     /**
      * A model may have multiple roles.
      */
-    public function roles(): BelongsToMany|\Illuminate\Database\Eloquent\Relations\BelongsToMany
+    public function roles(): Builder
     {
-        return $this->belongsToMany(config('permission.models.role'));
+        return $this->rolesQuery();
+    }
+
+    /**
+     * Query roles by the stored role IDs.
+     *
+     * We intentionally avoid a belongsToMany relationship here because the
+     * MongoDB driver will write inverse IDs (e.g. person_ids) into the roles
+     * collection, which can become a hotspot with large user bases. Storing the
+     * role_ids on the model keeps writes one-sided while still allowing role
+     * lookups via queries.
+     */
+    public function rolesQuery(): Builder
+    {
+        $roleClass = $this->getRoleClass();
+        return $roleClass->query()->whereIn('_id', $this->role_ids ?? []);
+    }
+
+    /**
+     * Gets the roles attribute.
+     */
+    public function getRolesAttribute(): Collection
+    {
+        return $this->rolesQuery()->get();
     }
 
     /**
@@ -81,14 +104,19 @@ trait HasRoles
             })
             ->each(function ($role) {
                 $this->ensureModelSharesGuard($role);
-            })
+            });
+
+        $this->role_ids = collect($this->role_ids ?? [])
+            ->merge($roles->pluck('_id'))
+            ->unique()
+            ->values()
             ->all();
 
-        $this->roles()->saveMany($roles);
+        $this->save();
 
         $this->forgetCachedPermissions();
 
-        return $roles;
+        return $roles->all();
     }
 
     /**
@@ -100,18 +128,24 @@ trait HasRoles
      */
     public function removeRole(...$roles)
     {
-        collect($roles)
+        $roles = collect($roles)
             ->flatten()
             ->map(function ($role) {
-                $role = $this->getStoredRole($role);
-                $this->roles()->detach($role);
-
-                return $role;
+                return $this->getStoredRole($role);
             });
+
+        $this->role_ids = collect($this->role_ids ?? [])
+            ->reject(function ($roleId) use ($roles) {
+                return $roles->pluck('_id')->contains($roleId);
+            })
+            ->values()
+            ->all();
+
+        $this->save();
 
         $this->forgetCachedPermissions();
 
-        return $roles;
+        return $roles->all();
     }
 
     /**
@@ -124,7 +158,8 @@ trait HasRoles
      */
     public function syncRoles(...$roles): Role|array|string
     {
-        $this->roles()->sync([]);
+        $this->role_ids = [];
+        $this->save();
 
         return $this->assignRole($roles);
     }
@@ -209,7 +244,7 @@ trait HasRoles
      */
     public function getRoleNames(): Collection
     {
-        return $this->roles()->pluck('name');
+        return $this->rolesQuery()->pluck('name');
     }
 
     /**
