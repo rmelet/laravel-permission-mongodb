@@ -42,21 +42,13 @@ trait HasRoles
     }
 
     /**
-     * A model may have multiple roles.
-     */
-    public function roles(): Builder
-    {
-        return $this->rolesQuery();
-    }
-
-    /**
      * Query roles by the stored role IDs.
      *
-     * We intentionally avoid a belongsToMany relationship here because the
-     * MongoDB driver will write inverse IDs (e.g. person_ids) into the roles
-     * collection, which can become a hotspot with large user bases. Storing the
-     * role_ids on the model keeps writes one-sided while still allowing role
-     * lookups via queries.
+     * We intentionally avoid defining a roles() relationship because the MongoDB
+     * driver will write inverse IDs (e.g. person_ids) into the roles collection.
+     * Returning a relationship instance also makes Eloquent treat roles() as a
+     * relationship, which isn't desired for one-sided role storage. Instead we
+     * expose roles via an accessor and query helper that read role_ids directly.
      */
     public function rolesQuery(): Builder
     {
