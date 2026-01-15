@@ -44,8 +44,10 @@ trait HasRoles
     /**
      * Query roles by the stored role IDs.
      *
-     * We intentionally avoid defining a roles() relationship because the MongoDB
-     * driver will write inverse IDs (e.g. person_ids) into the roles collection.
+     * We intentionally avoid defining a roles() relationship because Eloquent
+     * treats roles() as a relationship method and will throw if it does not
+     * return a Relation instance. The MongoDB driver will also write inverse IDs
+     * (e.g. person_ids) into the roles collection.
      * Returning a relationship instance also makes Eloquent treat roles() as a
      * relationship, which isn't desired for one-sided role storage. Instead we
      * expose roles via an accessor and query helper that read role_ids directly.
