@@ -3,6 +3,8 @@
 namespace Maklad\Permission\Traits;
 
 use Illuminate\Support\Collection;
+use Illuminate\Contracts\Pagination\Paginator;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Maklad\Permission\Contracts\RoleInterface as Role;
 use Maklad\Permission\Helpers;
 use Maklad\Permission\PermissionRegistrar;
@@ -239,6 +241,61 @@ trait HasRoles
     public function getRoleNames(): Collection
     {
         return $this->rolesQuery()->pluck('name');
+    }
+
+    /**
+     * Batch-load roles for a collection or paginator of models.
+     *
+     * This is the eager-loading replacement for the omitted roles() relationship.
+     * It keeps one-sided role storage (role_ids on the model) while still allowing
+     * paginated results to attach roles without triggering RelationNotFound errors.
+     *
+     * @param Collection|Paginator|LengthAwarePaginator $models
+     *
+     * @return Collection
+     */
+    public static function loadRolesFor($models): Collection
+    {
+        if ($models instanceof Paginator || $models instanceof LengthAwarePaginator) {
+            $models = $models->getCollection();
+        }
+
+        if (! $models instanceof Collection) {
+            $models = collect($models);
+        }
+
+        if ($models->isEmpty()) {
+            return $models;
+        }
+
+        $roleClass = app(PermissionRegistrar::class)->getRoleClass();
+        $roleIds = $models
+            ->pluck('role_ids')
+            ->flatten()
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($roleIds->isEmpty()) {
+            $models->each(function (Model $model) {
+                $model->setAttribute('roles', collect());
+            });
+
+            return $models;
+        }
+
+        $roles = $roleClass->query()->whereIn('_id', $roleIds)->get()->keyBy('_id');
+
+        $models->each(function (Model $model) use ($roles) {
+            $roleIds = collect($model->role_ids ?? []);
+            $modelRoles = $roleIds->map(function ($roleId) use ($roles) {
+                return $roles->get($roleId);
+            })->filter()->values();
+
+            $model->setAttribute('roles', $modelRoles);
+        });
+
+        return $models;
     }
 
     /**

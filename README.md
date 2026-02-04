@@ -328,6 +328,14 @@ $roles = $user->roles->pluck('name'); // Returns a collection
 $roles = $user->getRoleNames() // Returns a collection;
 ```
 
+If you need the equivalent of eager-loading roles for a paginated list (without
+defining a `roles()` relationship), use the batch helper:
+
+```php
+$people = Person::query()->paginate();
+Person::loadRolesFor($people);
+```
+
 The `HasRoles` trait also adds a `role` scope to your models to scope the query to certain roles or permissions:
 
 ```php
