@@ -298,7 +298,10 @@ $permission->removeRole($role);
 
 If you're using multiple guards the `guard_name` attribute needs to be set as well. Read about it in the [using multiple guards](#using-multiple-guards) section of the readme.
 
-The `HasRoles` trait adds Moloquent relationships to your models, which can be accessed directly or used as a base query:
+The `HasRoles` trait exposes role accessors and query helpers that read role IDs
+stored on your model (e.g. `role_ids` on the user). This avoids writing inverse
+IDs (like `user_ids`/`person_ids`) into the roles collection, which keeps writes
+one-sided while still allowing fast lookups by role:
 
 ```php
 // get a list of all permissions directly assigned to the user
@@ -315,6 +318,14 @@ $roles = $user->roles->pluck('name'); // Returns a collection
 
 // get all role names
 $roles = $user->getRoleNames() // Returns a collection;
+```
+
+If you need the equivalent of eager-loading roles for a paginated list (without
+defining a `roles()` relationship), use the batch helper:
+
+```php
+$people = Person::query()->paginate();
+Person::loadRolesFor($people);
 ```
 
 The `HasRoles` trait also adds a `role` scope to your models to scope the query to certain roles or permissions:

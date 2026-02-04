@@ -3,12 +3,13 @@
 namespace Maklad\Permission\Traits;
 
 use Illuminate\Support\Collection;
+use Illuminate\Contracts\Pagination\Paginator;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Maklad\Permission\Contracts\RoleInterface as Role;
 use Maklad\Permission\Helpers;
 use Maklad\Permission\PermissionRegistrar;
 use MongoDB\Laravel\Eloquent\Model;
 use MongoDB\Laravel\Eloquent\Builder;
-use MongoDB\Laravel\Relations\BelongsToMany;
 use ReflectionException;
 use function collect;
 
@@ -29,7 +30,8 @@ trait HasRoles
                 return;
             }
 
-            $model->roles()->sync([]);
+            $model->role_ids = [];
+            $model->save();
         });
     }
 
@@ -42,11 +44,28 @@ trait HasRoles
     }
 
     /**
-     * A model may have multiple roles.
+     * Query roles by the stored role IDs.
+     *
+     * We intentionally avoid defining a roles() relationship because Eloquent
+     * treats roles() as a relationship method and will throw if it does not
+     * return a Relation instance. The MongoDB driver will also write inverse IDs
+     * (e.g. person_ids) into the roles collection.
+     * Returning a relationship instance also makes Eloquent treat roles() as a
+     * relationship, which isn't desired for one-sided role storage. Instead we
+     * expose roles via an accessor and query helper that read role_ids directly.
      */
-    public function roles(): BelongsToMany|\Illuminate\Database\Eloquent\Relations\BelongsToMany
+    public function rolesQuery(): Builder
     {
-        return $this->belongsToMany(config('permission.models.role'));
+        $roleClass = $this->getRoleClass();
+        return $roleClass->query()->whereIn('_id', $this->role_ids ?? []);
+    }
+
+    /**
+     * Gets the roles attribute.
+     */
+    public function getRolesAttribute(): Collection
+    {
+        return $this->rolesQuery()->get();
     }
 
     /**
@@ -81,14 +100,19 @@ trait HasRoles
             })
             ->each(function ($role) {
                 $this->ensureModelSharesGuard($role);
-            })
+            });
+
+        $this->role_ids = collect($this->role_ids ?? [])
+            ->merge($roles->pluck('_id'))
+            ->unique()
+            ->values()
             ->all();
 
-        $this->roles()->saveMany($roles);
+        $this->save();
 
         $this->forgetCachedPermissions();
 
-        return $roles;
+        return $roles->all();
     }
 
     /**
@@ -100,18 +124,24 @@ trait HasRoles
      */
     public function removeRole(...$roles)
     {
-        collect($roles)
+        $roles = collect($roles)
             ->flatten()
             ->map(function ($role) {
-                $role = $this->getStoredRole($role);
-                $this->roles()->detach($role);
-
-                return $role;
+                return $this->getStoredRole($role);
             });
+
+        $this->role_ids = collect($this->role_ids ?? [])
+            ->reject(function ($roleId) use ($roles) {
+                return $roles->pluck('_id')->contains($roleId);
+            })
+            ->values()
+            ->all();
+
+        $this->save();
 
         $this->forgetCachedPermissions();
 
-        return $roles;
+        return $roles->all();
     }
 
     /**
@@ -124,7 +154,8 @@ trait HasRoles
      */
     public function syncRoles(...$roles): Role|array|string
     {
-        $this->roles()->sync([]);
+        $this->role_ids = [];
+        $this->save();
 
         return $this->assignRole($roles);
     }
@@ -209,7 +240,62 @@ trait HasRoles
      */
     public function getRoleNames(): Collection
     {
-        return $this->roles()->pluck('name');
+        return $this->rolesQuery()->pluck('name');
+    }
+
+    /**
+     * Batch-load roles for a collection or paginator of models.
+     *
+     * This is the eager-loading replacement for the omitted roles() relationship.
+     * It keeps one-sided role storage (role_ids on the model) while still allowing
+     * paginated results to attach roles without triggering RelationNotFound errors.
+     *
+     * @param Collection|Paginator|LengthAwarePaginator $models
+     *
+     * @return Collection
+     */
+    public static function loadRolesFor($models): Collection
+    {
+        if ($models instanceof Paginator || $models instanceof LengthAwarePaginator) {
+            $models = $models->getCollection();
+        }
+
+        if (! $models instanceof Collection) {
+            $models = collect($models);
+        }
+
+        if ($models->isEmpty()) {
+            return $models;
+        }
+
+        $roleClass = app(PermissionRegistrar::class)->getRoleClass();
+        $roleIds = $models
+            ->pluck('role_ids')
+            ->flatten()
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($roleIds->isEmpty()) {
+            $models->each(function (Model $model) {
+                $model->setAttribute('roles', collect());
+            });
+
+            return $models;
+        }
+
+        $roles = $roleClass->query()->whereIn('_id', $roleIds)->get()->keyBy('_id');
+
+        $models->each(function (Model $model) use ($roles) {
+            $roleIds = collect($model->role_ids ?? []);
+            $modelRoles = $roleIds->map(function ($roleId) use ($roles) {
+                return $roles->get($roleId);
+            })->filter()->values();
+
+            $model->setAttribute('roles', $modelRoles);
+        });
+
+        return $models;
     }
 
     /**
