@@ -244,6 +244,27 @@ trait HasRoles
     }
 
     /**
+     * Load roles for a single model.
+     *
+     * This is the eager-loading replacement for the omitted roles() relationship.
+     * It keeps one-sided role storage (role_ids on the model) while still allowing
+     * models to attach roles without triggering RelationNotFound errors.
+     *
+     * @param Model $model
+     *
+     * @return Model
+     */
+    public static function loadRolesForModel(Model $model): Model
+    {
+        // Use the model's `rolesQuery` to fetch roles for this single model.
+        $roles = $model->rolesQuery()->get();
+
+        $model->setAttribute('roles', $roles ?? collect());
+
+        return $model;
+    }
+
+    /**
      * Batch-load roles for a collection or paginator of models.
      *
      * This is the eager-loading replacement for the omitted roles() relationship.
