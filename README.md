@@ -234,7 +234,7 @@ First, add the `Maklad\Permission\Traits\HasRoles` trait to your `User` model(s)
 
 ```php
 use Illuminate\Auth\Authenticatable;
-use Jenssegers\Mongodb\Eloquent\Model as Model;
+use MongoDB\Laravel\Eloquent\Model as Model;
 use Illuminate\Foundation\Auth\Access\Authorizable;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 use Illuminate\Contracts\Auth\Access\Authorizable as AuthorizableContract;
@@ -251,7 +251,7 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
 > Note: that if you need to use `HasRoles` trait with another model ex.`Page` you will also need to add `protected $guard_name = 'web';` as well to that model or you would get an error
 
 ```php
-use Jenssegers\Mongodb\Eloquent\Model as Model;
+use MongoDB\Laravel\Eloquent\Model as Model;
 use Maklad\Permission\Traits\HasRoles;
 
 class Page extends Model
@@ -298,7 +298,10 @@ $permission->removeRole($role);
 
 If you're using multiple guards the `guard_name` attribute needs to be set as well. Read about it in the [using multiple guards](#using-multiple-guards) section of the readme.
 
-The `HasRoles` trait adds Moloquent relationships to your models, which can be accessed directly or used as a base query:
+The `HasRoles` trait exposes role accessors and query helpers that read role IDs
+stored on your model (e.g. `role_ids` on the user). This avoids writing inverse
+IDs (like `user_ids`/`person_ids`) into the roles collection, which keeps writes
+one-sided while still allowing fast lookups by role:
 
 ```php
 // get a list of all permissions directly assigned to the user
@@ -830,5 +833,5 @@ The MIT License (MIT). Please see [License File](LICENSE.md) for more informatio
 [link-contributors]: ../../contributors
 [link-releases]: ../../releases
 [link-laravel-permission]: https://github.com/spatie/laravel-permission
-[link-laravel-mongodb]: https://github.com/jenssegers/laravel-mongodb
+[link-laravel-mongodb]: https://github.com/mongodb/laravel-mongodb
 [link-freekmurze]: https://github.com/freekmurze

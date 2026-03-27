@@ -3,7 +3,6 @@
 namespace Maklad\Permission\Models;
 
 use Illuminate\Support\Collection;
-use Jenssegers\Mongodb\Eloquent\Model;
 use Maklad\Permission\Contracts\PermissionInterface;
 use Maklad\Permission\Exceptions\PermissionAlreadyExists;
 use Maklad\Permission\Exceptions\PermissionDoesNotExist;
@@ -12,8 +11,10 @@ use Maklad\Permission\Helpers;
 use Maklad\Permission\PermissionRegistrar;
 use Maklad\Permission\Traits\HasRoles;
 use Maklad\Permission\Traits\RefreshesPermissionCache;
+use MongoDB\Laravel\Eloquent\Model;
 use ReflectionException;
 use function app;
+use function collect;
 
 /**
  * Class Permission
@@ -113,6 +114,85 @@ class Permission extends Model implements PermissionInterface
     public function getRolesAttribute(): mixed
     {
         return $this->rolesQuery()->get();
+    }
+
+    /**
+     * Assign the given role(s) to the permission.
+     *
+     * @param array|string|Role ...$roles
+     *
+     * @return array
+     * @throws ReflectionException
+     */
+    public function assignRole(...$roles): array
+    {
+        $roles = collect($roles)
+            ->flatten()
+            ->map(function ($role) {
+                return $this->getStoredRole($role);
+            })
+            ->each(function ($role) {
+                $this->ensureModelSharesGuard($role);
+            });
+
+        $roles->each(function ($role) {
+            $role->givePermissionTo($this);
+        });
+
+        return $roles->all();
+    }
+
+    /**
+     * Revoke the given role(s) from the permission.
+     *
+     * @param array|string|Role ...$roles
+     *
+     * @return array
+     * @throws ReflectionException
+     */
+    public function removeRole(...$roles): array
+    {
+        $roles = collect($roles)
+            ->flatten()
+            ->map(function ($role) {
+                return $this->getStoredRole($role);
+            });
+
+        $roles->each(function ($role) {
+            $role->revokePermissionTo($this);
+        });
+
+        return $roles->all();
+    }
+
+    /**
+     * Remove all current roles and set the given ones.
+     *
+     * @param array ...$roles
+     *
+     * @return array
+     * @throws ReflectionException
+     */
+    public function syncRoles(...$roles): array
+    {
+        $roles = collect($roles)
+            ->flatten()
+            ->map(function ($role) {
+                return $this->getStoredRole($role);
+            })
+            ->each(function ($role) {
+                $this->ensureModelSharesGuard($role);
+            });
+
+        $this->roles->each(function ($role) {
+            $role->revokePermissionTo($this);
+        });
+
+        $roles->each(function ($role) {
+            $role->givePermissionTo($this);
+        });
+
+        return $roles->all();
     }
 
     /**

@@ -3,6 +3,11 @@ build:
     environment:
         mongodb: true
         selenium: true
+        php:
+            version: 8.2
+            # Install additional extensions from https://pecl.php.net
+            pecl_extensions:
+                - mongodb
     tests:
         override:
             -
