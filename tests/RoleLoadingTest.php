@@ -114,6 +114,38 @@ class RoleLoadingTest extends TestCase
         $this->assertSame('testRole', $this->testUser->toArray()['roles'][0]['name']);
     }
 
+    public function test_permission_batch_loader_reads_role_permission_ids_in_one_query(): void
+    {
+        $articles = $this->testUserPermission;
+        $news = Permission::findByName('edit-news');
+        $empty = Permission::findByName('edit-categories');
+        $articles->assignRole('testRole', 'testRole2');
+        $news->assignRole('testRole2');
+        $permissions = Permission::query()->where('guard_name', 'web')->paginate(10);
+
+        $this->startQueryLog();
+        $loaded = Permission::loadRolesFor($permissions);
+        $this->assertSame($permissions->getCollection(), $loaded);
+        $this->assertEqualsCanonicalizing(
+            ['testRole', 'testRole2'],
+            $loaded->firstWhere('name', $articles->name)->getRoleNames()->all()
+        );
+        $this->assertSame(['testRole2'], $loaded->firstWhere('name', $news->name)->getRoleNames()->all());
+        $this->assertTrue($loaded->firstWhere('name', $empty->name)->roles->isEmpty());
+        $this->assertCount(3, $permissions->toArray()['data']);
+        $this->assertQueryCount(1);
+
+        foreach ($loaded as $permission) {
+            $this->assertFalse($permission->isDirty());
+            $this->assertArrayNotHasKey('roles', $permission->getAttributes());
+            $this->assertArrayNotHasKey('role_ids', $permission->getAttributes());
+        }
+
+        $this->startQueryLog();
+        $this->assertTrue(Permission::loadRolesFor(collect())->isEmpty());
+        $this->assertQueryCount(0);
+    }
+
     public function test_batch_loader_does_not_persist_populated_or_empty_roles(): void
     {
         $this->testUser->assignRole('testRole');

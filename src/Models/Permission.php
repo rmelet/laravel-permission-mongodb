@@ -2,6 +2,8 @@
 
 namespace Maklad\Permission\Models;
 
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Support\Collection;
 use Maklad\Permission\Contracts\PermissionInterface;
 use Maklad\Permission\Exceptions\PermissionAlreadyExists;
@@ -118,6 +120,37 @@ class Permission extends Model implements PermissionInterface
     {
         $roleClass = $this->getRoleClass();
         return $roleClass->query()->where('permission_ids', 'all', [$this->_id]);
+    }
+
+    /**
+     * Batch-load roles using the permission IDs stored on roles.
+     *
+     * @param Collection|Paginator|LengthAwarePaginator $models
+     */
+    public static function loadRolesFor($models): Collection
+    {
+        if ($models instanceof Paginator || $models instanceof LengthAwarePaginator) {
+            $models = $models->getCollection();
+        }
+
+        $models = $models instanceof Collection ? $models : collect($models);
+        if ($models->isEmpty()) {
+            return $models;
+        }
+
+        $permissionIds = $models->map(fn (Model $model) => $model->getKey())->filter()->unique()->values();
+        $roleClass = app(PermissionRegistrar::class)->getRoleClass();
+        $roles = $permissionIds->isEmpty()
+            ? collect()
+            : $roleClass->query()->whereIn('permission_ids', $permissionIds)->get();
+
+        $models->each(function (Model $model) use ($roles) {
+            $model->setRelation('roles', $roles->filter(function ($role) use ($model) {
+                return in_array($model->getKey(), $role->permission_ids ?? [], true);
+            })->values());
+        });
+
+        return $models;
     }
 
     /**
