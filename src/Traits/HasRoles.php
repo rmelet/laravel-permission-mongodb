@@ -63,9 +63,9 @@ trait HasRoles
     /**
      * Gets the roles attribute.
      */
-    public function getRolesAttribute(): Collection
+    public function getRolesAttribute($value = null): Collection
     {
-        return $this->rolesQuery()->get();
+        return $value instanceof Collection ? $value : $this->rolesQuery()->get();
     }
 
     /**
@@ -95,6 +95,7 @@ trait HasRoles
     {
         $roles = $this->resolveRoleAssignments($roles);
         $roleIds = $roles->pluck('_id')->unique()->values()->all();
+        $this->forgetLoadedRoles();
 
         if ($this->exists) {
             if ($roleIds !== []) {
@@ -127,6 +128,7 @@ trait HasRoles
             });
 
         $roleIds = $roles->pluck('_id')->all();
+        $this->forgetLoadedRoles();
 
         if ($this->exists) {
             if ($roleIds !== []) {
@@ -154,6 +156,7 @@ trait HasRoles
     public function syncRoles(...$roles): Role|array|string
     {
         $roles = $this->resolveRoleAssignments($roles);
+        $this->forgetLoadedRoles();
         $this->role_ids = $roles->pluck('_id')->unique()->values()->all();
 
         if ($this->exists) {
@@ -258,7 +261,16 @@ trait HasRoles
      */
     public function getRoleNames(): Collection
     {
+        if (($this->attributes['roles'] ?? null) instanceof Collection) {
+            return $this->roles->pluck('name');
+        }
+
         return $this->rolesQuery()->pluck('name');
+    }
+
+    protected function forgetLoadedRoles(): void
+    {
+        unset($this->attributes['roles']);
     }
 
     /**

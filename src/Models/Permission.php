@@ -108,15 +108,6 @@ class Permission extends Model implements PermissionInterface
     }
 
     /**
-     * A permission can be applied to roles.
-     * @return mixed
-     */
-    public function getRolesAttribute(): mixed
-    {
-        return $this->rolesQuery()->get();
-    }
-
-    /**
      * Assign the given role(s) to the permission.
      *
      * @param array|string|Role ...$roles
@@ -134,6 +125,8 @@ class Permission extends Model implements PermissionInterface
             ->each(function ($role) {
                 $this->ensureModelSharesGuard($role);
             });
+
+        $this->forgetLoadedRoles();
 
         $roles->each(function ($role) {
             $role->givePermissionTo($this);
@@ -157,6 +150,8 @@ class Permission extends Model implements PermissionInterface
             ->map(function ($role) {
                 return $this->getStoredRole($role);
             });
+
+        $this->forgetLoadedRoles();
 
         $roles->each(function ($role) {
             $role->revokePermissionTo($this);
@@ -183,6 +178,8 @@ class Permission extends Model implements PermissionInterface
             ->each(function ($role) {
                 $this->ensureModelSharesGuard($role);
             });
+
+        $this->forgetLoadedRoles();
 
         $this->roles->each(function ($role) {
             $role->revokePermissionTo($this);

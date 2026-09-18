@@ -112,13 +112,13 @@ class CacheTest extends TestCase
     {
         $this->testUserRole->givePermissionTo(['edit-articles', 'edit-news']);
         $this->testUser->assignRole('testRole');
-        $this->assertCount(4, DB::getQueryLog());
+        DB::flushQueryLog();
 
         $this->assertTrue($this->testUser->hasPermissionTo('edit-articles'));
-        $this->assertCount(8, DB::getQueryLog());
+        $this->assertSame(1, $this->permissionCacheQueryCount());
 
         $this->assertTrue($this->testUser->hasPermissionTo('edit-news'));
-        $this->assertCount(10, DB::getQueryLog());
+        $this->assertSame(1, $this->permissionCacheQueryCount());
 
         // The permission comes from the cache, but as a new model whose roles relation is loaded again
         $this->assertTrue($this->testUser->hasPermissionTo('edit-articles'));
@@ -163,5 +163,17 @@ class CacheTest extends TestCase
         $this->registrar->forgetCachedPermissions();
 
         $this->assertFalse($this->app['cache']->has('maklad.permission.cache'));
+        $this->assertSame(1, $this->permissionCacheQueryCount());
+    }
+
+    private function permissionCacheQueryCount(): int
+    {
+        return collect(DB::getQueryLog())->filter(function ($entry) {
+            $command = json_decode($entry['query'], true);
+
+            // The registrar loads all permissions; direct checks use an ID filter.
+            return ($command['find'] ?? null) === config('permission.collection_names.permissions')
+                && empty($command['filter']);
+        })->count();
     }
 }
