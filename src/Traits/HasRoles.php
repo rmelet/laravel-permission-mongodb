@@ -93,22 +93,18 @@ trait HasRoles
      */
     public function assignRole(...$roles)
     {
-        $roles = collect($roles)
-            ->flatten()
-            ->map(function ($role) {
-                return $this->getStoredRole($role);
-            })
-            ->each(function ($role) {
-                $this->ensureModelSharesGuard($role);
-            });
+        $roles = $this->resolveRoleAssignments($roles);
+        $roleIds = $roles->pluck('_id')->unique()->values()->all();
 
-        $this->role_ids = collect($this->role_ids ?? [])
-            ->merge($roles->pluck('_id'))
-            ->unique()
-            ->values()
-            ->all();
-
-        $this->save();
+        if ($this->exists) {
+            if ($roleIds !== []) {
+                $this->push('role_ids', $roleIds, true);
+            }
+        } else {
+            $this->role_ids = collect($this->role_ids ?? [])
+                ->merge($roleIds)->unique()->values()->all();
+            $this->save();
+        }
 
         $this->forgetCachedPermissions();
 
@@ -130,14 +126,17 @@ trait HasRoles
                 return $this->getStoredRole($role);
             });
 
-        $this->role_ids = collect($this->role_ids ?? [])
-            ->reject(function ($roleId) use ($roles) {
-                return $roles->pluck('_id')->contains($roleId);
-            })
-            ->values()
-            ->all();
+        $roleIds = $roles->pluck('_id')->all();
 
-        $this->save();
+        if ($this->exists) {
+            if ($roleIds !== []) {
+                $this->pull('role_ids', $roleIds);
+            }
+        } else {
+            $this->role_ids = collect($this->role_ids ?? [])
+                ->diff($roleIds)->values()->all();
+            $this->save();
+        }
 
         $this->forgetCachedPermissions();
 
@@ -154,10 +153,29 @@ trait HasRoles
      */
     public function syncRoles(...$roles): Role|array|string
     {
-        $this->role_ids = [];
-        $this->save();
+        $roles = $this->resolveRoleAssignments($roles);
+        $this->role_ids = $roles->pluck('_id')->unique()->values()->all();
 
-        return $this->assignRole($roles);
+        if ($this->exists) {
+            $this->setKeysForSaveQuery($this->newQuery())->update(['role_ids' => $this->role_ids]);
+            $this->syncOriginalAttribute('role_ids');
+        } else {
+            $this->save();
+        }
+
+        $this->forgetCachedPermissions();
+
+        return $roles->all();
+    }
+
+    private function resolveRoleAssignments(array $roles): Collection
+    {
+        return collect($roles)->flatten()->map(function ($role) {
+            $role = $this->getStoredRole($role);
+            $this->ensureModelSharesGuard($role);
+
+            return $role;
+        });
     }
 
     /**
