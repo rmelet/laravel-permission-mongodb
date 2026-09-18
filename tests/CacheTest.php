@@ -58,10 +58,12 @@ class CacheTest extends TestCase
         $this->assertCount(4, DB::getQueryLog());
 
         $permission->delete();
-        $this->assertCount(5, DB::getQueryLog());
+        DB::flushQueryLog();
 
         $this->registrar->registerPermissions();
-        $this->assertCount(6, DB::getQueryLog());
+        $this->assertSame(1, $this->permissionCacheQueryCount());
+        $this->registrar->registerPermissions();
+        $this->assertSame(1, $this->permissionCacheQueryCount());
     }
 
     #[Test]

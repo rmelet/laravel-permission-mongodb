@@ -4,11 +4,46 @@ namespace Maklad\Permission\Test;
 
 use Maklad\Permission\Exceptions\PermissionAlreadyExists;
 use Maklad\Permission\Models\Permission;
+use Maklad\Permission\Models\Role;
 use Monolog\Level;
 use PHPUnit\Framework\Attributes\Test;
 
 class PermissionTest extends TestCase
 {
+    #[Test]
+    public function test_deleting_permission_removes_role_references_without_inverse_ids(): void
+    {
+        $permission = $this->testUserPermission;
+        $this->testUserRole->givePermissionTo('edit-news', $permission, 'edit-categories');
+        $permission->assignRole('testRole2');
+        $this->assertArrayNotHasKey('role_ids', $permission->fresh()->getAttributes());
+
+        $permission->delete();
+
+        $remainingIds = Permission::query()->whereIn('name', ['edit-news', 'edit-categories'])->get()->modelKeys();
+        $role = $this->testUserRole->fresh();
+        $this->assertEqualsCanonicalizing($remainingIds, $role->permission_ids);
+        $this->assertSame([0, 1], array_keys($role->permission_ids));
+        $this->assertSame([], Role::findByName('testRole2')->permission_ids);
+        $this->assertFalse($role->hasPermissionTo($permission));
+    }
+
+    #[Test]
+    public function test_soft_deleting_permission_preserves_references_until_force_delete(): void
+    {
+        $permission = SoftDeletingPermission::create(['name' => 'soft-permission']);
+        $permission->assignRole('testRole');
+
+        $permission->delete();
+        $this->assertSame([$permission->getKey()], $this->testUserRole->fresh()->permission_ids);
+
+        $permission->restore();
+        $this->assertTrue($this->testUserRole->fresh()->hasPermissionTo($permission));
+
+        $permission->forceDelete();
+        $this->assertSame([], $this->testUserRole->fresh()->permission_ids);
+    }
+
     #[Test]
     public function it_throws_an_exception_when_the_permission_already_exists()
     {

@@ -29,6 +29,19 @@ class Permission extends Model implements PermissionInterface
     public $guarded = ['id'];
     protected Helpers $helpers;
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::deleted(function (self $permission) {
+            if (method_exists($permission, 'isForceDeleting') && ! $permission->isForceDeleting()) {
+                return;
+            }
+
+            $permission->rolesQuery()->pull('permission_ids', $permission->getKey());
+        });
+    }
+
     /**
      * Permission constructor.
      *

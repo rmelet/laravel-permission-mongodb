@@ -23,18 +23,6 @@ trait HasRoles
 
     private $roleClass;
 
-    public static function bootHasRoles(): void
-    {
-        static::deleting(function (Model $model) {
-            if (isset($model->forceDeleting) && !$model->forceDeleting) {
-                return;
-            }
-
-            $model->role_ids = [];
-            $model->save();
-        });
-    }
-
     public function getRoleClass()
     {
         if ($this->roleClass === null) {
