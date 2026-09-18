@@ -98,6 +98,75 @@ class RoleLoadingTest extends TestCase
         $this->assertSame(['testRole2'], $permission->getRoleNames()->all());
     }
 
+    public function test_single_loader_does_not_persist_roles_when_saving(): void
+    {
+        $this->testUser->assignRole('testRole');
+        User::loadRolesForModel($this->testUser);
+
+        $this->assertTrue($this->testUser->relationLoaded('roles'));
+        $this->assertFalse($this->testUser->isDirty());
+        $this->testUser->email = 'changed@example.test';
+        $this->testUser->save();
+
+        $fresh = $this->testUser->fresh();
+        $this->assertSame('changed@example.test', $fresh->email);
+        $this->assertArrayNotHasKey('roles', $fresh->getAttributes());
+        $this->assertSame('testRole', $this->testUser->toArray()['roles'][0]['name']);
+    }
+
+    public function test_batch_loader_does_not_persist_populated_or_empty_roles(): void
+    {
+        $this->testUser->assignRole('testRole');
+        $empty = User::create(['email' => 'empty@example.test']);
+        $users = collect([$this->testUser, $empty]);
+        User::loadRolesFor($users);
+
+        foreach ($users as $user) {
+            $this->assertTrue($user->relationLoaded('roles'));
+            $this->assertFalse($user->isDirty());
+            $user->save();
+            $this->assertArrayNotHasKey('roles', $user->fresh()->getAttributes());
+        }
+
+        $this->assertSame('testRole', $users->toArray()[0]['roles'][0]['name']);
+        $this->assertSame([], $users->toArray()[1]['roles']);
+    }
+
+    public function test_empty_batch_loader_keeps_models_clean(): void
+    {
+        User::loadRolesFor(collect([$this->testUser]));
+        $this->assertTrue($this->testUser->relationLoaded('roles'));
+        $this->assertFalse($this->testUser->isDirty());
+        $this->testUser->save();
+        $this->assertArrayNotHasKey('roles', $this->testUser->fresh()->getAttributes());
+    }
+
+    public function test_refresh_reloads_preloaded_roles_without_a_relationship_method(): void
+    {
+        $this->testUser->assignRole('testRole');
+        User::loadRolesForModel($this->testUser);
+        $this->testUser->fresh()->syncRoles('testRole2');
+
+        $this->assertSame($this->testUser, $this->testUser->refresh());
+        $this->assertTrue($this->testUser->relationLoaded('roles'));
+        $this->assertSame(['testRole2'], $this->testUser->getRoleNames()->all());
+        $this->assertFalse($this->testUser->isDirty());
+    }
+
+    public function test_refresh_reloads_a_permissions_preloaded_roles(): void
+    {
+        $permission = $this->testUserPermission;
+        $permission->assignRole('testRole');
+        Permission::loadRolesForModel($permission);
+        $permission->fresh()->syncRoles('testRole2');
+
+        $permission->refresh();
+
+        $this->assertTrue($permission->relationLoaded('roles'));
+        $this->assertSame(['testRole2'], $permission->getRoleNames()->all());
+        $this->assertFalse($permission->isDirty());
+    }
+
     private function startQueryLog(): void
     {
         DB::connection()->enableQueryLog();

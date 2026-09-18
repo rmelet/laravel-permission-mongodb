@@ -63,9 +63,9 @@ trait HasRoles
     /**
      * Gets the roles attribute.
      */
-    public function getRolesAttribute($value = null): Collection
+    public function getRolesAttribute(): Collection
     {
-        return $value instanceof Collection ? $value : $this->rolesQuery()->get();
+        return $this->relationLoaded('roles') ? $this->getRelation('roles') : $this->rolesQuery()->get();
     }
 
     /**
@@ -261,7 +261,7 @@ trait HasRoles
      */
     public function getRoleNames(): Collection
     {
-        if (($this->attributes['roles'] ?? null) instanceof Collection) {
+        if ($this->relationLoaded('roles')) {
             return $this->roles->pluck('name');
         }
 
@@ -270,7 +270,25 @@ trait HasRoles
 
     protected function forgetLoadedRoles(): void
     {
-        unset($this->attributes['roles']);
+        $this->unsetRelation('roles');
+    }
+
+    public function refresh()
+    {
+        if (! $this->exists) {
+            return $this;
+        }
+
+        $reloadRoles = $this->relationLoaded('roles');
+        // Eloquent cannot reload this collection through a roles() relationship.
+        $this->forgetLoadedRoles();
+        parent::refresh();
+
+        if ($reloadRoles) {
+            static::loadRolesForModel($this);
+        }
+
+        return $this;
     }
 
     /**
@@ -286,10 +304,7 @@ trait HasRoles
      */
     public static function loadRolesForModel(Model $model): Model
     {
-        // Use the model's `rolesQuery` to fetch roles for this single model.
-        $roles = $model->rolesQuery()->get();
-
-        $model->setAttribute('roles', $roles ?? collect());
+        $model->setRelation('roles', $model->rolesQuery()->get());
 
         return $model;
     }
@@ -329,7 +344,7 @@ trait HasRoles
 
         if ($roleIds->isEmpty()) {
             $models->each(function (Model $model) {
-                $model->setAttribute('roles', collect());
+                $model->setRelation('roles', collect());
             });
 
             return $models;
@@ -343,7 +358,7 @@ trait HasRoles
                 return $roles->get($roleId);
             })->filter()->values();
 
-            $model->setAttribute('roles', $modelRoles);
+            $model->setRelation('roles', $modelRoles);
         });
 
         return $models;
