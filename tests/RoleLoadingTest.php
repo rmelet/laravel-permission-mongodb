@@ -199,6 +199,36 @@ class RoleLoadingTest extends TestCase
         $this->assertFalse($permission->isDirty());
     }
 
+    public function test_lazy_role_reads_are_cached_and_invalidated_after_assignment_changes(): void
+    {
+        $this->testUser->assignRole('testRole');
+        $user = $this->testUser->fresh();
+
+        $this->startQueryLog();
+        $this->assertTrue($user->hasRole('testRole'));
+        $this->assertTrue($user->hasRole('testRole'));
+        $this->assertSame(['testRole'], $user->getRoleNames()->all());
+        $this->assertTrue($user->relationLoaded('roles'));
+        $this->assertQueryCount(1);
+
+        $user->removeRole('testRole');
+        $this->assertFalse($user->hasRole('testRole'));
+        $user->assignRole('testRole2');
+        $this->assertTrue($user->hasRole('testRole2'));
+        $user->syncRoles('testRole');
+        $this->assertSame(['testRole'], $user->getRoleNames()->all());
+    }
+
+    public function test_lazy_role_names_cache_empty_roles_without_dirtying_the_model(): void
+    {
+        $this->startQueryLog();
+        $this->assertSame([], $this->testUser->getRoleNames()->all());
+        $this->assertFalse($this->testUser->hasRole('testRole'));
+        $this->assertTrue($this->testUser->roles->isEmpty());
+        $this->assertFalse($this->testUser->isDirty());
+        $this->assertQueryCount(1);
+    }
+
     private function startQueryLog(): void
     {
         DB::connection()->enableQueryLog();

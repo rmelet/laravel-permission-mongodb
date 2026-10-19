@@ -227,7 +227,7 @@ class Permission extends Model implements PermissionInterface
 
         $this->forgetLoadedRoles();
 
-        $this->roles->each(function ($role) {
+        $this->rolesQuery()->get()->each(function ($role) {
             $role->revokePermissionTo($this);
         });
 

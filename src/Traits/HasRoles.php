@@ -53,7 +53,11 @@ trait HasRoles
      */
     public function getRolesAttribute(): Collection
     {
-        return $this->relationLoaded('roles') ? $this->getRelation('roles') : $this->rolesQuery()->get();
+        if (! $this->relationLoaded('roles')) {
+            $this->setRelation('roles', $this->rolesQuery()->get());
+        }
+
+        return $this->getRelation('roles');
     }
 
     /**
@@ -249,11 +253,7 @@ trait HasRoles
      */
     public function getRoleNames(): Collection
     {
-        if ($this->relationLoaded('roles')) {
-            return $this->roles->pluck('name');
-        }
-
-        return $this->rolesQuery()->pluck('name');
+        return $this->roles->pluck('name');
     }
 
     protected function forgetLoadedRoles(): void
